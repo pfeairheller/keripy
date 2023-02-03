@@ -86,7 +86,8 @@ setup(
                         'PyYaml>=6.0',
                         'apispec>=6.0.0',
                         'mnemonic>=0.20',
-                        'PrettyTable>=3.5.0'
+                        'PrettyTable>=3.5.0',
+                        'liboqs-python>=0.7.2'
     ],
     extras_require={
     },

@@ -5,6 +5,7 @@ keri.core.coring module
 """
 import re
 import json
+import oqs
 from typing import Union
 from collections.abc import Iterable
 
@@ -488,13 +489,17 @@ class MatterCodex:
     SHA2_512:             str = '0G'  # SHA2 512 bit digest self-addressing derivation.
     Long:                 str = '0H'  # Long 4 byte b2 number
     ECDSA_256k1N:         str = '1AAA'  # ECDSA secp256k1 verification key non-transferable, basic derivation.
-    ECDSA_256k1:          str = '1AAB'  # Ed25519 public verification or encryption key, basic derivation
+    ECDSA_256k1:          str = '1AAB'  # ECDSA public verification or encryption key, basic derivation
     Ed448N:               str = '1AAC'  # Ed448 non-transferable prefix public signing verification key. Basic derivation.
     Ed448:                str = '1AAD'  # Ed448 public signing verification key. Basic derivation.
     Ed448_Sig:            str = '1AAE'  # Ed448 signature. Self-signing derivation.
     Tern:                 str = '1AAF'  # 3 byte b2 number or 4 char B64 str.
     DateTime:             str = '1AAG'  # Base64 custom encoded 32 char ISO-8601 DateTime
     X25519_Cipher_Salt:   str = '1AAH'  # X25519 100 char b64 Cipher of 24 char qb64 Salt
+    Falcon_512_Seed:      str = '1AAI'  # Falcon 512 random seed for private key
+    Falcon_512N:          str = '1AAJ'  # Falcon 512 verification key non-transferable, basic derivation.
+    Falcon_512:           str = '1AAK'  # Falcon 512 verification key basic derivation
+    Falcon_512_Sig:       str = '1AAL'  # Falcon 512 verification key basic derivation
     TBD1:                 str = '2AAA'  # Testing purposes only fixed with lead size 1
     TBD2:                 str = '3AAA'  # Testing purposes only of fixed with lead size 2
     StrB64_L0:            str = '4A'  # String Base64 Only Lead Size 0
@@ -742,6 +747,10 @@ class Matter:
         '1AAF': Sizage(hs=4, ss=0, fs=8, ls=0),
         '1AAG': Sizage(hs=4, ss=0, fs=36, ls=0),
         '1AAH': Sizage(hs=4, ss=0, fs=100, ls=0),
+        '1AAI': Sizage(hs=4, ss=0, fs=1712, ls=0),
+        '1AAJ': Sizage(hs=4, ss=0, fs=1200, ls=0),
+        '1AAK': Sizage(hs=4, ss=0, fs=1200, ls=0),
+        '1AAL': Sizage(hs=4, ss=0, fs=924, ls=0),
         '2AAA': Sizage(hs=4, ss=0, fs=8, ls=1),
         '3AAA': Sizage(hs=4, ss=0, fs=8, ls=2),
         '4A': Sizage(hs=2, ss=2, fs=None, ls=0),
@@ -2009,6 +2018,8 @@ class Verfer(Matter):
 
         if self.code in [MtrDex.Ed25519N, MtrDex.Ed25519]:
             self._verify = self._ed25519
+        elif self.code in [MtrDex.Falcon_512N, MtrDex.Falcon_512]:
+            self._verify = self._falcon512
         else:
             raise ValueError("Unsupported code = {} for verifier.".format(self.code))
 
@@ -2041,6 +2052,11 @@ class Verfer(Matter):
             return False
 
         return True
+
+    @staticmethod
+    def _falcon512(sig, ser, key):
+        verifier = oqs.Signature("Falcon-512")
+        return verifier.verify(ser, sig, key)
 
 
 class Cigar(Matter):
@@ -2166,12 +2182,18 @@ class Signer(Matter):
                                     False make non-transferable
 
         """
+        verkey = bytes()
         try:
             super(Signer, self).__init__(raw=raw, code=code, **kwa)
         except EmptyMaterialError as ex:
             if code == MtrDex.Ed25519_Seed:
                 raw = pysodium.randombytes(pysodium.crypto_sign_SEEDBYTES)
                 super(Signer, self).__init__(raw=raw, code=code, **kwa)
+            elif code == MtrDex.Falcon_512_Seed:
+                sig = oqs.Signature("Falcon-512")
+                verkey = sig.generate_keypair()
+                raw = sig.export_secret_key()
+                super(Signer, self).__init__(raw=bytes(raw), code=code, **kwa)
             else:
                 raise ValueError("Unsupported signer code = {}.".format(code))
 
@@ -2181,6 +2203,14 @@ class Signer(Matter):
             verfer = Verfer(raw=verkey,
                             code=MtrDex.Ed25519 if transferable
                             else MtrDex.Ed25519N)
+        elif self.code == MtrDex.Falcon_512_Seed:
+            self._sign = self._falcon512
+            sig = oqs.Signature("Falcon-512", secret_key=raw)
+            # TODO: Need to get public key here.
+            verfer = Verfer(raw=verkey,
+                            code=MtrDex.Falcon_512 if transferable
+                            else MtrDex.Falcon_512N)
+
         else:
             raise ValueError("Unsupported signer code = {}.".format(self.code))
 
@@ -2274,6 +2304,38 @@ class Signer(Matter):
                          index=index,
                          ondex=ondex,
                          verfer=verfer,)
+
+    @staticmethod
+    def _falcon512(ser, seed, verfer, index, only=False, ondex=None, **kwa):
+        fsig = oqs.Signature("Falcon-512", secret_key=seed)
+        sig = fsig.sign(ser)
+        if index is None:  # Must be Cigar i.e. non-indexed signature
+            return Cigar(raw=bytes(sig), code=MtrDex.Falcon_512_Sig, verfer=verfer)
+        else:  # Must be Siger i.e. indexed signature
+            # should add Indexer class method to get ms main index size for given code
+            if only:  # only main index ondex not used
+                ondex = None
+                if index <= 63: # (64 ** ms - 1) where ms is main index size
+                    code = IdrDex.Falcon_512_Crt_Sig  # use small current only
+                else:
+                    code = IdrDex.Falcon_512_Big_Crt_Sig  # use big current only
+            else:  # both
+                if ondex == None:
+                    ondex = index  # enable default to be same
+                if ondex == index and index <= 63:  # both same and small
+                    code = IdrDex.Falcon_512_Sig  # use  small both same
+                else:  # otherwise big or both not same so use big both
+                    code = IdrDex.Falcon_512_Big_Sig  # use use big both
+
+            return Siger(raw=sig,
+                         code=code,
+                         index=index,
+                         ondex=ondex,
+                         verfer=verfer,)
+
+
+
+
 
 
 class Salter(Matter):
@@ -2948,6 +3010,8 @@ class Prefixer(Matter):
                 self._derive = self._derive_ed25519
             elif code == MtrDex.Blake3_256:
                 self._derive = self._derive_blake3_256
+            elif code == MtrDex.SHA3_256:
+                self._derive = self._derive_SHA3_256
             else:
                 raise ValueError("Unsupported code = {} for prefixer.".format(code))
 
@@ -2961,6 +3025,8 @@ class Prefixer(Matter):
             self._verify = self._verify_ed25519
         elif self.code == MtrDex.Blake3_256:
             self._verify = self._verify_blake3_256
+        elif self.code == MtrDex.SHA3_256:
+            self._verify = self._verify_SHA3_256
         else:
             raise ValueError("Unsupported code = {} for prefixer.".format(self.code))
 
@@ -3138,6 +3204,47 @@ class Prefixer(Matter):
         try:
             raw, code = self._derive_blake3_256(ked=ked)  # replace with dummy 'i'
             crymat = Matter(raw=raw, code=MtrDex.Blake3_256)
+            if crymat.qb64 != pre:  # derived raw with dummy 'i' must match pre
+                return False
+
+            if prefixed and ked["i"] != pre:  # incoming 'i' must match pre
+                return False
+
+        except Exception as ex:
+            return False
+
+        return True
+
+    def _derive_SHA3_256(self, ked):
+        """
+        Returns tuple (raw, code) of pre (qb64) as blake3 digest
+            as derived from inception key event dict ked
+        """
+        ked = dict(ked)  # make copy so don't clobber original ked
+        ilk = ked["t"]
+        if ilk not in (Ilks.icp, Ilks.dip, Ilks.vcp):
+            raise DerivationError("Invalid ilk = {} to derive pre.".format(ilk))
+
+        # put in dummy pre to get size correct
+        ked["i"] = self.Dummy * Matter.Sizes[MtrDex.SHA3_256].fs
+        ked["d"] = ked["i"]
+        raw, ident, kind, ked, version = sizeify(ked=ked)
+        dig = hashlib.sha3_256(raw).digest()  # digest with dummy 'i'
+        return (dig, MtrDex.SHA3_256)  # dig is derived correct new 'i'
+
+    def _verify_SHA3_256(self, ked, pre, prefixed=False):
+        """
+        Returns True if verified False otherwise
+        Verify derivation of fully qualified Base64 prefix from
+        inception key event dict (ked)
+
+        Parameters:
+            ked is inception key event dict
+            pre is Base64 fully qualified default to .qb64
+        """
+        try:
+            raw, code = self._derive_SHA3_256(ked=ked)  # replace with dummy 'i'
+            crymat = Matter(raw=raw, code=MtrDex.SHA3_256)
             if crymat.qb64 != pre:  # derived raw with dummy 'i' must match pre
                 return False
 
@@ -3450,6 +3557,13 @@ class IndexerCodex:
     ECDSA_256k1_Big_Crt_Sig: str = '2D'  # ECDSA secp256k1 sig appears in current list only.
     Ed448_Big_Sig: str = '3A'  # Ed448 signature appears in both lists.
     Ed448_Big_Crt_Sig: str = '3B'  # Ed448 signature appears in current list only.
+
+    Falcon_512_Sig: str = 'E'  # Ed25519 sig appears same in both lists if any.
+    Falcon_512_Crt_Sig: str = 'F'  # Ed25519 sig appears in current list only.
+    Falcon_512_Big_Sig: str = '0E'  # Ed25519 sig appears in both lists.
+    Falcon_512_Big_Crt_Sig: str = '0F'  # Ed25519 sig appears in current list only.
+
+
     TBD0: str = '0z'  # Test of Var len label L=N*4 <= 4095 char quadlets includes code
     TBD1: str = '1z'  # Test of index sig lead 1
     TBD4: str = '4z'  # Test of index sig lead 1 big

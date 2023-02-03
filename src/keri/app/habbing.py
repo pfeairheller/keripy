@@ -1867,8 +1867,8 @@ class Hab(BaseHab):
     def __init__(self, **kwa):
         super(Hab, self).__init__(**kwa)
 
-    def make(self, *, secrecies=None, iridx=0, code=coring.MtrDex.Blake3_256,
-             transferable=True, isith=None, icount=1, nsith=None, ncount=None,
+    def make(self, *, secrecies=None, iridx=0, code=coring.MtrDex.Blake3_256, dcode=coring.MtrDex.Blake3_256,
+             icode=coring.MtrDex.Ed25519_Seed, transferable=True, isith=None, icount=1, nsith=None, ncount=None,
              toad=None, wits=None, delpre=None, estOnly=False, DnD=False, hidden=False, data=None):
         """
         Finish setting up or making Hab from parameters includes inception.
@@ -1878,6 +1878,8 @@ class Hab(BaseHab):
             secrecies (list | None): list of secrets to preload key pairs if any
             iridx (int): initial rotation index after ingestion of secrecies
             code (str): prefix derivation code default Blake3
+            icode (str): signing key code default Blake3
+            dcode (str): next key derivation code default Blake3
             transferable (bool): True means pre is transferable (default)
                     False means pre is nontransferable
             isith (int | str | list | None): incepting signing threshold as
@@ -1926,9 +1928,11 @@ class Hab(BaseHab):
 
         else:  # use defaults
             verfers, digers = self.mgr.incept(icount=icount,
+                                              icode=icode,
                                               ncount=ncount,
                                               stem=self.name,
                                               transferable=transferable,
+                                              dcode=dcode,
                                               temp=self.temp)
 
         serder = super(Hab, self).make(DnD, code, data, delpre, digers, estOnly, isith, nsith, toad, verfers, wits)
