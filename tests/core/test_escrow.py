@@ -676,58 +676,58 @@ def test_out_of_order_escrow():
         psr.parse(ims=bytearray(rotmsg), kvy=kvy)
         # kvy.process(ims=bytearray(rotmsg))  # process local copy of msg
         assert pre not in kvy.kevers  # event not accepted
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 2))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=2).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == rotdig.encode("utf-8")  #  escrow entry for event
+        assert escrows[0].said == rotdig
 
         # verify Kevery process is idempotent to previously escrowed events
         psr.parse(ims=bytearray(rotmsg), kvy=kvy)
         # kvy.process(ims=bytearray(rotmsg))  # process local copy of msg
         assert pre not in kvy.kevers  # event not accepted
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 2))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=2).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == rotdig.encode("utf-8")  #  escrow entry for event
+        assert escrows[0].said == rotdig
 
         # verify Kevery process out of order escrow is idempotent to previously escrowed events
         # assuming not stale but nothing else has changed
         kvy.processEscrowOutOfOrders()
         assert pre not in kvy.kevers  # event not accepted
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 2))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=2).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == rotdig.encode("utf-8")   #  escrow entry for event
+        assert escrows[0].said == rotdig
 
         # apply ixn msg to Kevery to process
         psr.parse(ims=bytearray(ixnmsg), kvy=kvy)
         # kvy.process(ims=bytearray(ixnmsg))  # process local copy of msg
         assert pre not in kvy.kevers  # event not accepted
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 1))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=1).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == ixndig.encode("utf-8")  #  escrow entry for event
+        assert escrows[0].said == ixndig
 
         # verify Kevery process is idempotent to previously escrowed events
         psr.parse(ims=bytearray(ixnmsg), kvy=kvy)
         # kvy.process(ims=bytearray(ixnmsg))  # process local copy of msg
         assert pre not in kvy.kevers  # event not accepted
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 1))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=1).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == ixndig.encode("utf-8")  #  escrow entry for event
+        assert escrows[0].said == ixndig
 
         # verify Kevery process out of order escrow is idempotent to previously escrowed events
         # assuming not stale but nothing else has changed
         kvy.processEscrowOutOfOrders()
         assert pre not in kvy.kevers  # event not accepted
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 1))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=1).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == ixndig.encode("utf-8")    #  escrow entry for event
+        assert escrows[0].said == ixndig
 
         # Process partials but stale escrow  set Timeout to 0
         kvy.TimeoutOOE = 0  # forces all escrows to be stale
         time.sleep(0.001)
         kvy.processEscrowOutOfOrders()
         assert pre not in kvy.kevers  # key state not updated
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 1))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=1).qb64))
         assert len(escrows) == 0  # escrow gone
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 2))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=2).qb64))
         assert len(escrows) == 0
 
         # Now reset timeout so not zero and rsend events to reload escrow
@@ -737,17 +737,17 @@ def test_out_of_order_escrow():
         psr.parse(ims=bytearray(rotmsg), kvy=kvy)
         # kvy.process(ims=bytearray(rotmsg))  # process local copy of msg
         assert pre not in kvy.kevers  # event not accepted
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 2))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=2).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == rotdig.encode("utf-8")  #  escrow entry for event
+        assert escrows[0].said == rotdig
 
         # re-apply ixn msg to Kevery to process
         psr.parse(ims=bytearray(ixnmsg), kvy=kvy)
         # kvy.process(ims=bytearray(ixnmsg))  # process local copy of msg
         assert pre not in kvy.kevers  # event not accepted
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 1))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=1).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == ixndig.encode("utf-8")  #  escrow entry for event
+        assert escrows[0].said == ixndig
 
         # re-apply inception msg to Kevery to process
         psr.parse(ims=bytearray(icpmsg), kvy=kvy)
@@ -757,21 +757,21 @@ def test_out_of_order_escrow():
         assert kvr.serder.said == icpdig  # key state updated so event was validated
         assert kvr.sn == 0  # key state successfully updated
         # verify escrows not changed
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 2))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=2).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == rotdig.encode("utf-8")  #  escrow entry for event
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 1))
+        assert escrows[0].said == rotdig
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=1).qb64))
         assert len(escrows) == 1
-        assert escrows[0] == ixndig.encode("utf-8")  #  escrow entry for event
+        assert escrows[0].said == ixndig
 
         # Process out of order escrow
         # assuming not stale but nothing else has changed
         kvy.processEscrowOutOfOrders()
         assert kvr.serder.said == rotdig  # key state updated so event was validated
         assert kvr.sn == 2  # key state successfully updated
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 1))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=1).qb64))
         assert len(escrows) == 0  # escrow gone
-        escrows = kvy.db.getOoes(dbing.snKey(pre, 2))
+        escrows = kvy.db.ooes.get(keys=(pre, coring.Number(num=2).qb64))
         assert len(escrows) == 0
 
 

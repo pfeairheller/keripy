@@ -4218,7 +4218,10 @@ class Kevery:
         self.db.putDts(dgkey, helping.nowIso8601().encode("utf-8"))
         self.db.putSigs(dgkey, [siger.qb64b for siger in sigers])
         self.db.putEvt(dgkey, serder.raw)
-        self.db.addOoe(snKey(serder.preb, serder.sn), serder.saidb)
+        # self.db.addOoe(snKey(serder.preb, serder.sn), serder.saidb)
+
+        self.db.ooes.add(keys=(serder.pre, Number(num=serder.sn).qb64),
+                         val=basing.EscrowRecord(said=serder.said, local=self.local))
         if wigers:
             self.db.putWigs(dgkey, [siger.qb64b for siger in wigers])
         if seqner and saider:
@@ -4518,103 +4521,97 @@ class Kevery:
                         If successful then remove from escrow table
         """
 
-        key = ekey = b''  # both start same. when not same means escrows found
-        while True:  # break when done
-            for ekey, edig in self.db.getOoeItemsNextIter(key=key):
-                try:
-                    pre, sn = splitKeySN(ekey)  # get pre and sn from escrow item
-                    # check date if expired then remove escrow.
-                    dtb = self.db.getDts(dgKey(pre, bytes(edig)))
-                    if dtb is None:  # othewise is a datetime as bytes
-                        # no date time so raise ValidationError which unescrows below
-                        logger.info("Kevery unescrow error: Missing event datetime"
-                                    " at dig = %s\n", bytes(edig))
+        for (pre, snq), escrd in self.db.ooes.getItemIter():
+            try:
+                # check date if expired then remove escrow.
+                dtb = self.db.getDts(dgKey(pre, escrd.said))
+                if dtb is None:  # othewise is a datetime as bytes
+                    # no date time so raise ValidationError which unescrows below
+                    logger.info("Kevery unescrow error: Missing event datetime"
+                                " at dig = %s\n", escrd.said)
 
-                        raise ValidationError("Missing escrowed event datetime "
-                                              "at dig = {}.".format(bytes(edig)))
+                    raise ValidationError("Missing escrowed event datetime "
+                                          "at dig = {}.".format(escrd.said))
 
-                    # do date math here and discard if stale nowIso8601() bytes
-                    dtnow = helping.nowUTC()
-                    dte = helping.fromIso8601(bytes(dtb))
-                    if (dtnow - dte) > datetime.timedelta(seconds=self.TimeoutOOE):
-                        # escrow stale so raise ValidationError which unescrows below
-                        logger.info("Kevery unescrow error: Stale event escrow "
-                                    " at dig = %s\n", bytes(edig))
+                # do date math here and discard if stale nowIso8601() bytes
+                dtnow = helping.nowUTC()
+                dte = helping.fromIso8601(bytes(dtb))
+                if (dtnow - dte) > datetime.timedelta(seconds=self.TimeoutOOE):
+                    # escrow stale so raise ValidationError which unescrows below
+                    logger.info("Kevery unescrow error: Stale event escrow "
+                                " at dig = %s\n", escrd.said)
 
-                        raise ValidationError("Stale event escrow "
-                                              "at dig = {}.".format(bytes(edig)))
+                    raise ValidationError("Stale event escrow "
+                                          "at dig = {}.".format(escrd.said))
 
-                    # get the escrowed event using edig
-                    eraw = self.db.getEvt(dgKey(pre, bytes(edig)))
-                    if eraw is None:
-                        # no event so raise ValidationError which unescrows below
-                        logger.info("Kevery unescrow error: Missing event at."
-                                    "dig = %s\n", bytes(edig))
+                # get the escrowed event using edig
+                eraw = self.db.getEvt(dgKey(pre, escrd.said))
+                if eraw is None:
+                    # no event so raise ValidationError which unescrows below
+                    logger.info("Kevery unescrow error: Missing event at."
+                                "dig = %s\n", escrd.said)
 
-                        raise ValidationError("Missing escrowed evt at dig = {}."
-                                              "".format(bytes(edig)))
+                    raise ValidationError("Missing escrowed evt at dig = {}."
+                                          "".format(escrd.said))
 
-                    eserder = serdering.SerderKERI(raw=bytes(eraw))  # escrowed event
+                eserder = serdering.SerderKERI(raw=bytes(eraw))  # escrowed event
 
-                    #  get sigs and attach
-                    sigs = self.db.getSigs(dgKey(pre, bytes(edig)))
-                    if not sigs:  # otherwise its a list of sigs
-                        # no sigs so raise ValidationError which unescrows below
-                        logger.info("Kevery unescrow error: Missing event sigs at."
-                                    "dig = %s\n", bytes(edig))
+                #  get sigs and attach
+                sigs = self.db.getSigs(dgKey(pre, escrd.said))
+                if not sigs:  # otherwise its a list of sigs
+                    # no sigs so raise ValidationError which unescrows below
+                    logger.info("Kevery unescrow error: Missing event sigs at."
+                                "dig = %s\n", escrd.said)
 
-                        raise ValidationError("Missing escrowed evt sigs at "
-                                              "dig = {}.".format(bytes(edig)))
+                    raise ValidationError("Missing escrowed evt sigs at "
+                                          "dig = {}.".format(escrd.said))
 
-                    # process event
-                    sigers = [Siger(qb64b=bytes(sig)) for sig in sigs]
+                # process event
+                sigers = [Siger(qb64b=bytes(sig)) for sig in sigs]
 
-                    #  get wigs
-                    wigs = self.db.getWigs(dgKey(pre, bytes(edig)))  # list of wigs
-                    wigers = [Siger(qb64b=bytes(wig)) for wig in wigs]
+                #  get wigs
+                wigs = self.db.getWigs(dgKey(pre, escrd.said))  # list of wigs
+                wigers = [Siger(qb64b=bytes(wig)) for wig in wigs]
 
-                    self.processEvent(serder=eserder, sigers=sigers, wigers=wigers)
+                self.processEvent(serder=eserder, sigers=sigers, wigers=wigers)
 
-                    # If process does NOT validate event with sigs, becasue it is
-                    # still out of order then process will attempt to re-escrow
-                    # and then raise OutOfOrderError (subclass of ValidationError)
-                    # so we can distinquish between ValidationErrors that are
-                    # re-escrow vs non re-escrow. We want process to be idempotent
-                    # with respect to processing events that result in escrow items.
-                    # On re-escrow attempt by process, Ooe escrow is called by
-                    # Kevery.self.escrowOOEvent Which calls
-                    # self.db.addOoe(snKey(pre, sn), serder.digb)
-                    # which in turn will not enter dig as dup if one already exists.
-                    # So re-escrow attempt will not change the escrowed ooe db.
-                    # Non re-escrow ValidationError means some other issue so unescrow.
-                    # No error at all means processed successfully so also unescrow.
+                # If process does NOT validate event with sigs, becasue it is
+                # still out of order then process will attempt to re-escrow
+                # and then raise OutOfOrderError (subclass of ValidationError)
+                # so we can distinquish between ValidationErrors that are
+                # re-escrow vs non re-escrow. We want process to be idempotent
+                # with respect to processing events that result in escrow items.
+                # On re-escrow attempt by process, Ooe escrow is called by
+                # Kevery.self.escrowOOEvent Which calls
+                # self.db.addOoe(snKey(pre, sn), serder.digb)
+                # which in turn will not enter dig as dup if one already exists.
+                # So re-escrow attempt will not change the escrowed ooe db.
+                # Non re-escrow ValidationError means some other issue so unescrow.
+                # No error at all means processed successfully so also unescrow.
 
-                except OutOfOrderError as ex:
-                    # still waiting on missing prior event to validate
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.exception("Kevery unescrow failed: %s\n", ex.args[0])
-                    else:
-                        logger.error("Kevery unescrow failed: %s\n", ex.args[0])
+            except OutOfOrderError as ex:
+                # still waiting on missing prior event to validate
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.exception("Kevery unescrow failed: %s\n", ex.args[0])
+                else:
+                    logger.error("Kevery unescrow failed: %s\n", ex.args[0])
 
-                except Exception as ex:  # log diagnostics errors etc
-                    # error other than out of order so remove from OO escrow
-                    self.db.delOoe(snKey(pre, sn), edig)  # removes one escrow at key val
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.exception("Kevery unescrowed: %s\n", ex.args[0])
-                    else:
-                        logger.error("Kevery unescrowed: %s\n", ex.args[0])
+            except Exception as ex:  # log diagnostics errors etc
+                # error other than out of order so remove from OO escrow
+                self.db.ooes.rem(keys=(pre, snq), val=escrd)  # removes one escrow at key val
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.exception("Kevery unescrowed: %s\n", ex.args[0])
+                else:
+                    logger.error("Kevery unescrowed: %s\n", ex.args[0])
 
-                else:  # unescrow succeeded, remove from escrow
-                    # We don't remove all escrows at pre,sn because some might be
-                    # duplicitous so we process remaining escrows in spite of found
-                    # valid event escrow.
-                    self.db.delOoe(snKey(pre, sn), edig)  # removes one escrow at key val
-                    logger.info("Kevery unescrow succeeded in valid event: "
-                                "event=\n%s\n", json.dumps(eserder.ked, indent=1))
+            else:  # unescrow succeeded, remove from escrow
+                # We don't remove all escrows at pre,sn because some might be
+                # duplicitous so we process remaining escrows in spite of found
+                # valid event escrow.
+                self.db.ooes.rem(keys=(pre, snq), val=escrd)  # removes one escrow at key val
+                logger.info("Kevery unescrow succeeded in valid event: "
+                            "event=\n%s\n", json.dumps(eserder.ked, indent=1))
 
-            if ekey == key:  # still same so no escrows found on last while iteration
-                break
-            key = ekey  # setup next while iteration, with key after ekey
 
     def processEscrowPartialSigs(self):
         """

@@ -10,7 +10,7 @@ import json
 from hio import help
 from hio.base import doing
 
-from keri.core import eventing
+from keri.core import eventing, coring
 from keri.app.cli.common import existing
 from keri.db import dbing
 from keri.kering import ConfigurationError
@@ -56,11 +56,9 @@ def escrows(tymth, tock=0.0, **opts):
                 oots = list()
                 key = ekey = b''  # both start same. when not same means escrows found
                 while True:
-                    for ekey, edig in hby.db.getOoeItemsNextIter(key=key):
-                        pre, sn = dbing.splitKeySN(ekey)  # get pre and sn from escrow item
-
+                    for (pre, snq), escrd in hby.db.ooes.getItemIter():
                         try:
-                            oots.append(eventing.loadEvent(hby.db, pre, edig))
+                            oots.append(eventing.loadEvent(hby.db, pre, escrd.said))
                         except ValueError as e:
                             raise e
 

@@ -283,6 +283,17 @@ class OobiQueryRecord:  # information for responding to OOBI query
 
 
 @dataclass
+class EscrowRecord:
+    """
+    Tracks escrowed key events by digest and path of origin of the event.  Local
+    protected events have .local=True otherwise they are consider events from a remote
+    unprotected source
+    """
+    said: str = None  # qb64 said of event
+    local: bool = False  # default to False as fail secure
+
+
+@dataclass
 class OobiRecord:
     """
     Keyed by CID (AID) and role, the minimum information needed for any OOBI
@@ -819,10 +830,13 @@ class Baser(dbing.LMDBer):
         self.pdes = self.env.open_db(key=b'pdes.')
         self.pwes = self.env.open_db(key=b'pwes.', dupsort=True)
         self.uwes = self.env.open_db(key=b'uwes.', dupsort=True)
-        self.ooes = self.env.open_db(key=b'ooes.', dupsort=True)
+        # self.ooes = self.env.open_db(key=b'ooes.', dupsort=True)
         self.dels = self.env.open_db(key=b'dels.', dupsort=True)
         self.ldes = self.env.open_db(key=b'ldes.', dupsort=True)
         self.qnfs = self.env.open_db(key=b'qnfs.', dupsort=True)
+
+        # Refactored escrow databases
+        self.ooes = koming.IoSetKomer(db=self, subkey="ooes.", schema=EscrowRecord)
 
         # events as ordered by first seen ordinals
         self.fons = subing.CesrSuber(db=self, subkey='fons.', klas=coring.Seqner)
@@ -2713,97 +2727,6 @@ class Baser(dbing.LMDBer):
             val is dup val (does not include insertion ordering proem)
         """
         return self.delIoVal(self.uwes, key, val)
-
-    def putOoes(self, key, vals):
-        """
-        Use snKey()
-        Write each out of order escrow event dig entry from list of bytes vals to key
-        Adds to existing event indexes at key if any
-        Returns True If at least one of vals is added as dup, False otherwise
-        Duplicates are inserted in insertion order.
-        """
-        return self.putIoVals(self.ooes, key, vals)
-
-    def addOoe(self, key, val):
-        """
-        Use snKey()
-        Add out of order escrow val bytes as dup to key in db
-        Adds to existing event indexes at key if any
-        Returns True if written else False if dup val already exists
-        Duplicates are inserted in insertion order.
-        """
-        return self.addIoVal(self.ooes, key, val)
-
-    def getOoes(self, key):
-        """
-        Use snKey()
-        Return list of out of order escrow event dig vals at key
-        Returns empty list if no entry at key
-        Duplicates are retrieved in insertion order.
-        """
-        return self.getIoVals(self.ooes, key)
-
-    def getOoeLast(self, key):
-        """
-        Use snKey()
-        Return last inserted dup val of out of order escrow event dig vals at key
-        Returns None if no entry at key
-        Duplicates are retrieved in insertion order.
-        """
-        return self.getIoValLast(self.ooes, key)
-
-    def getOoeItemsNext(self, key=b'', skip=True):
-        """
-        Use snKey()
-        Return all dups of out of order escrowed event dig items at next key after key.
-        Item is (key, val) where proem has already been stripped from val
-        If key is b'' empty then returns dup items at first key.
-        If skip is False and key is not b'' empty then returns dup items at key
-        Returns empty list if no entry at key
-        Duplicates are retrieved in insertion order.
-        """
-        return self.getIoItemsNext(self.ooes, key, skip)
-
-    def getOoeItemsNextIter(self, key=b'', skip=True):
-        """
-        Use sgKey()
-        Return iterator of out of order escrowed event dig items at next key after key.
-        Items is (key, val) where proem has already been stripped from val
-        If key is b'' empty then returns dup items at first key.
-        If skip is False and key is not b'' empty then returns dup items at key
-        Raises StopIteration Error when empty
-        Duplicates are retrieved in insertion order.
-        """
-        return self.getIoItemsNextIter(self.ooes, key, skip)
-
-    def cntOoes(self, key):
-        """
-        Use snKey()
-        Return count of dup event dig at key
-        Returns zero if no entry at key
-        """
-        return self.cntIoVals(self.ooes, key)
-
-    def delOoes(self, key):
-        """
-        Use snKey()
-        Deletes all values at key.
-        Returns True If key exists in database Else False
-        """
-        return self.delIoVals(self.ooes, key)
-
-    def delOoe(self, key, val):
-        """
-        Use snKey()
-        Deletes dup val at key in db.
-        Returns True If dup at  exists in db Else False
-
-        Parameters:
-            db is opened named sub db with dupsort=True
-            key is bytes of key within sub db's keyspace
-            val is dup val (does not include insertion ordering proem)
-        """
-        return self.delIoVal(self.ooes, key, val)
 
     def putQnfs(self, key, vals):
         """
