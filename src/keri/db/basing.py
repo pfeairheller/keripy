@@ -830,12 +830,12 @@ class Baser(dbing.LMDBer):
         self.pdes = self.env.open_db(key=b'pdes.')
         self.pwes = self.env.open_db(key=b'pwes.', dupsort=True)
         self.uwes = self.env.open_db(key=b'uwes.', dupsort=True)
-        # self.ooes = self.env.open_db(key=b'ooes.', dupsort=True)
         self.dels = self.env.open_db(key=b'dels.', dupsort=True)
         self.ldes = self.env.open_db(key=b'ldes.', dupsort=True)
         self.qnfs = self.env.open_db(key=b'qnfs.', dupsort=True)
 
         # Refactored escrow databases
+        # self.ooes = self.env.open_db(key=b'ooes.', dupsort=True)
         self.ooes = koming.IoSetKomer(db=self, subkey="ooes.", schema=EscrowRecord)
 
         # events as ordered by first seen ordinals
@@ -1015,7 +1015,7 @@ class Baser(dbing.LMDBer):
 
         # Resolved multifactor well known OOBI auth records.  Keys by controller URL
         self.rmfa = koming.Komer(db=self,
-                                 subkey='mfa.',
+                                 subkey='rmfa.',
                                  schema=OobiRecord,
                                  sep=">")  # Use seperator not a allowed in URLs so no splitting occurs.
 
