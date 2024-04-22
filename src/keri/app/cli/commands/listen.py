@@ -9,10 +9,12 @@ import json
 import socket
 import os, os.path
 
+import falcon
 from hio import help
 from hio.base import doing
 from hio.help import decking
 
+from keri import kering
 from keri.app import habbing
 from keri.app.cli.common import existing
 
@@ -32,8 +34,10 @@ parser.add_argument("--verbose", "-V", help="print JSON of all current events", 
 
 
 def loadHandlers(hby, cues):
-    ids = IdentifiersHandler(cues=cues)
+    ids = IdentifiersHandler(cues=cues, base=hby.base)
     hby.exc.addHandler(ids)
+    unlock = UnlockHandler(cues=cues, base=hby.base)
+    hby.exc.addHandler(unlock)
 
 
 class IdentifiersHandler:
@@ -41,10 +45,11 @@ class IdentifiersHandler:
 
     resource = "/identifiers"
 
-    def __init__(self, cues):
+    def __init__(self, cues, base):
         """ Initialize peer to peer challenge response messsage """
 
         self.cues = cues
+        self.base = base
         super(IdentifiersHandler, self).__init__()
 
     def handle(self, serder, attachments=None):
@@ -59,10 +64,50 @@ class IdentifiersHandler:
         name = payload["name"]
         passcode = payload["passcode"] if "passcode" in payload else None
 
-        with existing.existingHby(name=name, bran=passcode) as hby:
+        try:
+            hby = habbing.Habery(name=name, base=self.base, bran=passcode)
+            identifiers = []
             for hab in hby.habs.values():
-                msg = dict(name=hab.name, pre=hab.pre)
-                self.cues.append(msg)
+                msg = dict(name=hab.name, prefix=hab.pre)
+                identifiers.append(msg)
+
+            self.cues.append(dict(status=falcon.HTTP_200, body=identifiers))
+        except (kering.AuthError, ValueError) as e:
+            msg = dict(status=falcon.HTTP_400, body=str(e))
+            self.cues.append(msg)
+
+
+class UnlockHandler:
+    """  Handle challenge response peer to peer `exn` message """
+
+    resource = "/unlock"
+
+    def __init__(self, cues, base):
+        """ Initialize peer to peer challenge response messsage """
+
+        self.cues = cues
+        self.base = base
+        super(UnlockHandler, self).__init__()
+
+    def handle(self, serder, attachments=None):
+        """  Do route specific processsing of Challenge response messages
+
+        Parameters:
+            serder (Serder): Serder of the exn challenge response message
+            attachments (list): list of tuples of pather, CESR SAD path attachments to the exn event
+
+        """
+        payload = serder.ked['a']
+        name = payload["name"]
+        passcode = payload["passcode"] if "passcode" in payload else None
+
+        try:
+            habbing.Habery(name=name, base=self.base, bran=passcode, free=True)
+            msg = dict(status=falcon.HTTP_200, body={})
+        except (kering.AuthError, ValueError) as e:
+            msg = dict(status=falcon.HTTP_400, body=str(e))
+
+        self.cues.append(msg)
 
 
 def handler(args):
@@ -79,7 +124,7 @@ def listen(tymth, tock=0.0, **opts):
     base = args.base
     bran = args.bran
 
-    with habbing.openHby(name="listener", base=base, bran=bran, temp=False) as hby:
+    with existing.existingHby(name="listener", base=base, bran=bran) as hby:
 
         cues = decking.Deck()
         loadHandlers(hby, cues)
@@ -89,6 +134,7 @@ def listen(tymth, tock=0.0, **opts):
 
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server.bind("/tmp/keripy_kli.s")
+
         while True:
             server.listen(1)
             conn, addr = server.accept()
