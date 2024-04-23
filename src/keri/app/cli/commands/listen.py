@@ -12,6 +12,8 @@ import os, os.path
 import falcon
 from hio import help
 from hio.base import doing
+from hio.core import http
+from hio.core.unixing import serving
 from hio.help import decking
 
 from keri import kering
@@ -38,6 +40,77 @@ def loadHandlers(hby, cues):
     hby.exc.addHandler(ids)
     unlock = UnlockHandler(cues=cues, base=hby.base)
     hby.exc.addHandler(unlock)
+
+
+class HttpEnd:
+    """
+    HTTP handler that accepts and KERI events POSTed as the body of a request with all attachments to
+    the message as a CESR attachment HTTP header.  KEL Messages are processed and added to the database
+    of the provided Habitat.
+
+    This also handles `req`, `exn` and `tel` messages that respond with a KEL replay.
+    """
+
+    TimeoutQNF = 30
+    TimeoutMBX = 5
+
+    def __init__(self, psr, cues):
+        """
+        Create the KEL HTTP server from the Habitat with an optional Falcon App to
+        register the routes with.
+
+        Parameters
+             rxbs (bytearray): output queue of bytes for message processing
+             mbx (Mailboxer): Mailbox storage
+             qrycues (Deck): inbound qry response queues
+
+        """
+        self.psr = psr
+        self.cues = cues
+
+
+    def on_put(self, req, rep):
+        """
+        Handles PUT for KERI mbx event messages.
+
+        Parameters:
+              req (Request) Falcon HTTP request
+              rep (Response) Falcon HTTP response
+
+        ---
+        summary:  Accept KERI events with attachment headers and parse
+        description:  Accept KERI events with attachment headers and parse.
+        tags:
+           - Events
+        requestBody:
+           required: true
+           content:
+             application/json:
+               schema:
+                 type: object
+                 description: KERI event message
+        responses:
+           200:
+              description: Mailbox query response for server sent events
+           204:
+              description: KEL or EXN event accepted.
+        """
+        if req.method == "OPTIONS":
+            rep.status = falcon.HTTP_200
+            return
+
+        rep.set_header('Cache-Control', "no-cache")
+        rep.set_header('connection', "close")
+
+        self.psr.parseOne(ims=req.bounded_stream.read())
+
+        if self.cues:
+            msg = self.cues.popleft()
+            rep.data = json.dumps(msg).encode("utf-8")
+            rep.set_header('Content-Type', "application/json")
+            rep.status = falcon.HTTP_200
+        else:
+            rep.status = falcon.HTTP_204
 
 
 class IdentifiersHandler:
@@ -71,7 +144,7 @@ class IdentifiersHandler:
                 msg = dict(name=hab.name, prefix=hab.pre)
                 identifiers.append(msg)
 
-            self.cues.append(dict(status=falcon.HTTP_200, body=identifiers))
+            self.cues.append(identifiers)
         except (kering.AuthError, ValueError) as e:
             msg = dict(status=falcon.HTTP_400, body=str(e))
             self.cues.append(msg)
@@ -115,7 +188,25 @@ def handler(args):
 
     """
     kwa = dict(args=args)
-    return [doing.doify(listen, **kwa)]
+    app = falcon.App(cors_enable=True)
+    hby = existing.setupHby(name="listener", base=args.base, bran=args.bran)
+    hbyDoer = habbing.HaberyDoer(habery=hby)  # setup doer
+
+    cues = decking.Deck()
+    loadHandlers(hby, cues)
+
+    httpEnd = HttpEnd(psr=hby.psr, cues=cues)
+    app.add_route("/", httpEnd)
+
+    if os.path.exists("/tmp/keripy_kli.s"):
+        os.remove("/tmp/keripy_kli.s")
+
+    servant = serving.Server(path="/tmp/keripy_kli.s",
+                             bufsize=8069)
+    server = http.Server(app=app, servant=servant)
+    httpServerDoer = http.ServerDoer(server=server)
+
+    return [doing.doify(listen, **kwa), httpServerDoer, hbyDoer]
 
 
 def listen(tymth, tock=0.0, **opts):
@@ -126,26 +217,28 @@ def listen(tymth, tock=0.0, **opts):
 
     with existing.existingHby(name="listener", base=base, bran=bran) as hby:
 
-        cues = decking.Deck()
-        loadHandlers(hby, cues)
-
-        if os.path.exists("/tmp/keripy_kli.s"):
-            os.remove("/tmp/keripy_kli.s")
-
-        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        server.bind("/tmp/keripy_kli.s")
+        # cues = decking.Deck()
+        # loadHandlers(hby, cues)
+        #
+        # if os.path.exists("/tmp/keripy_kli.s"):
+        #     os.remove("/tmp/keripy_kli.s")
+        #
+        # server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        # server.bind("/tmp/keripy_kli.s")
 
         while True:
-            server.listen(1)
-            conn, addr = server.accept()
-            datagram = conn.recv(1024)
-            hby.psr.parseOne(bytes(datagram))
+            yield tock
+            # server.listen(1)
+            # conn, addr = server.accept()
+            # datagram = conn.recv(1024)
+            # hby.psr.parseOne(bytes(datagram))
 
-            while not cues:
-                yield tock
+            # while not cues:
+            #     yield tock
+            #
+            # msg = cues.popleft()
+            # data = json.dumps(msg).encode("utf-8")
+            # print(data)
 
-            msg = cues.popleft()
-            data = json.dumps(msg).encode("utf-8")
-
-            conn.sendto(data, addr)
+            # conn.sendto(data, addr)
 
