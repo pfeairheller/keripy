@@ -1749,19 +1749,19 @@ class Number(Matter):
                     code = NumDex.Short
 
                 elif num <= (256 ** 5 - 1):  # make tall version of code
-                    code = code = NumDex.Tall
+                    code = NumDex.Tall
 
                 elif num <= (256 ** 8 - 1):  # make big version of code
-                    code = code = NumDex.Big
+                    code = NumDex.Big
 
                 elif num <= (256 ** 11 - 1):  # make large version of code
-                    code = code = NumDex.Large
+                    code = NumDex.Large
 
                 elif num <= (256 ** 14 - 1):  # make great version of code
-                    code = code = NumDex.Great
+                    code = NumDex.Great
 
                 elif num <= (256 ** 17 - 1):  # make vast version of code
-                    code = code = NumDex.Vast
+                    code = NumDex.Vast
 
                 else:
                     raise InvalidValueError(f"Invalid num = {num}, too large to encode.")
