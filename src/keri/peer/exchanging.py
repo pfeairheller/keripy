@@ -110,6 +110,7 @@ class Exchanger:
                                                 " for evt = {}.".format(cigar,
                                                                         serder.ked))
         else:
+            self.cues.append(dict(kin="partiallySignedEscrow", ked=serder.ked))
             self.escrowPSEvent(serder=serder, tsgs=[], pathed=pathed)
             raise MissingSignatureError("Failure satisfying exn, no cigs or sigs"
                                         " for evt = {}.".format(serder.ked))
@@ -157,8 +158,8 @@ class Exchanger:
         # Execute any behavior specific handling, not sure if this should be different than verify
         try:
             behavior.handle(serder=serder, **kwargs)
-        except AttributeError:
-            logger.info(f"Behavior for {route} missing or does not have handle for said={serder.said}")
+        except AttributeError as e:
+            logger.info(f"Behavior for {route} missing or does not have handle ('{e}') for said={serder.said}")
             logger.debug(f"event=\n{serder.pretty()}\n")
 
     def processEscrow(self):
@@ -231,6 +232,7 @@ class Exchanger:
                 self.processEvent(serder=serder, tsgs=tsgs, pathed=pathed, **kwargs)
 
             except MissingSignatureError as ex:
+                self.cues.append(dict(kin="partiallySignedEscrow", ked=serder.ked))
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.info("Exchange partially signed unescrow failed: %s", ex.args[0])
                 else:
